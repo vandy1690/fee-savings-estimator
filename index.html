@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fee Savings Estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Changa:wght@300;400;500;600;700&family=Oswald:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-sans: "Oswald", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;   /* headlines */
+    --font-mono: "Changa", ui-monospace, "SF Mono", "Menlo", monospace;                                   /* numbers only */
+    --font-body: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;   /* all other copy */
+
+    --w-light: 300;
+    --w-normal: 400;
+    --w-medium: 500;
+    --w-semibold: 600;
+    --w-bold: 700;
+
+    --text-32: 2rem;
+    --text-24: 1.5rem;
+    --text-18: 1.125rem;
+    --text-16: 1rem;
+    --text-14: 0.875rem;
+    --text-13: 0.8125rem;
+    --text-12: 0.75rem;
+    --text-11: 0.6875rem;
+
+    --leading-tight: 1.1;
+    --leading-normal: 1.5;
+    --tracking-tight: -0.02em;
+    --tracking-wide: 0.02em;
+    --tracking-label: 0.08em;
+
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* ===== NerdWallet palette ===== */
+    --nw-green: #00AE4D;         /* primary / savings */
+    --nw-green-dark: #006842;    /* deep accent */
+    --nw-lime: #8CCB32;
+    --nw-navy: #003650;          /* headings, links, current-fee bar */
+    --nw-orange: #FF7C2A;        /* fee increase / warning */
+    --nw-light-blue: #E0F3FF;
+
+    --surface-page: #F7F8F9;
+    --surface-card: #FFFFFF;
+    --surface-inset: #F2F5F4;
+    --text-primary: #10262E;
+    --text-secondary: #5A6B70;
+    --text-tertiary: #8A979B;
+    --border-subtle: #E3E8EA;
+    --border-default: #D4DBDD;
+    --track: #E9EDEE;
+    --focus-ring: var(--nw-green);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-body);
+    font-size: 16.8px;
+    font-weight: var(--w-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--surface-page);
+    color: #000000;
+  }
+
+  .page {
+    min-height: 100dvh;
+    height: 100dvh;
+    display: flex;
+    justify-content: center;
+    padding: clamp(14px, 3vw, 32px);
+    overflow: hidden;
+  }
+  .shell {
+    width: 100%;
+    max-width: 1200px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 2.2vh, 22px);
+  }
+
+  /* header */
+  .eyebrow {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-body);
+    font-size: 12.3px;   /* 80% of previous (15.36px) */
+    font-weight: var(--w-bold);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--nw-green);
+  }
+  .eyebrow .dot { width: 8px; height: 8px; border-radius: 9999px; background: var(--nw-green); display: inline-block; }
+  h1 {
+    margin: 10px 0 0;
+    font-family: var(--font-sans);
+    font-size: 48px;
+    font-weight: var(--w-bold);
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--leading-tight);
+    color: #000000;
+  }
+  .subline { margin: 10px 0 0; font-family: var(--font-body); font-size: 19.2px; font-weight: var(--w-medium); color: #000000; line-height: var(--leading-normal); }
+
+  /* 12-col grid: main content = 8, merchant details = last 4 */
+  .grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: clamp(14px, 2vw, 22px);
+    align-items: stretch;
+  }
+  .main {
+    grid-column: span 8;
+    display: flex; flex-direction: column;
+    gap: clamp(14px, 2vh, 22px);
+    min-width: 0; min-height: 0;
+  }
+  .aside { grid-column: span 4; min-width: 0; min-height: 0; }
+
+  /* iPad landscape (~1180x820): height is tight — cards fill and share the column,
+     with an internal scroll safety-net so nothing spills past the screen edge. */
+  @media (orientation: landscape) {
+    .main > .card { flex: 1 1 0; min-height: 0; overflow: auto; }
+    .aside > .card { height: 100%; overflow: auto; }
+  }
+  /* iPad portrait (~810x1180): height is generous — give the details rail a touch
+     more width and let card heights follow their content. */
+  @media (orientation: portrait) {
+    .main { grid-column: span 7; }
+    .aside { grid-column: span 5; }
+    .aside > .card { height: 100%; }
+  }
+  /* phones: stack and allow the page to scroll normally */
+  @media (max-width: 700px) {
+    .page { height: auto; overflow: visible; }
+    .shell { height: auto; }
+    .grid { flex: none; }
+    .main, .aside { grid-column: 1 / -1; }
+  }
+
+  .card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 2px rgba(16, 38, 46, 0.04);
+    padding: clamp(18px, 2.2vh, 26px);
+  }
+  .card-title {
+    font-family: var(--font-body);
+    font-size: var(--text-18);
+    font-weight: var(--w-bold);
+    letter-spacing: var(--tracking-tight);
+    color: var(--nw-navy);
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+
+  /* pill / chip */
+  .chip {
+    align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--text-12);
+    font-weight: var(--w-medium);
+    padding: 5px 11px;
+    border-radius: 9999px;
+    white-space: nowrap;
+  }
+
+  /* ===== bar chart (fee comparison) ===== */
+  .bars { display: flex; flex-direction: column; gap: 18px; }
+  .bar-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 14px; }
+  .bar-label {
+    font-size: 15.6px;
+    font-weight: var(--w-medium);
+    color: #000000;
+  }
+  .bar-track {
+    position: relative;
+    height: 40px;
+    background: var(--track);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: var(--radius-md);
+    width: 0;
+    transition: width .35s cubic-bezier(.4,0,.2,1), background .2s ease;
+    min-width: 3px;
+  }
+  .bar-val {
+    position: absolute;
+    right: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--text-14);
+    font-weight: var(--w-medium);
+    color: var(--text-primary);
+  }
+
+  .meta-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 15.6px; color: #000000;
+    padding-top: 18px; margin-top: 20px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .meta-row .val { font-family: var(--font-mono); }
+
+  .note { margin: 14px 0 0; font-size: 14.4px; color: #000000; line-height: var(--leading-normal); }
+
+  /* ===== potential savings ===== */
+  .savings-figs { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .fig {
+    flex: 1 1 150px; min-width: 130px;
+    background: var(--surface-inset);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .fig-label {
+    font-family: var(--font-body);
+    font-size: 13.2px;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: #000000;
+  }
+  .fig-val {
+    font-family: var(--font-mono);
+    font-weight: var(--w-medium);
+    font-size: clamp(1.6rem, 4.4vh, 2.4rem);
+    line-height: 1;
+    letter-spacing: var(--tracking-tight);
+    color: var(--nw-green-dark);
+  }
+
+  /* proportion bar */
+  .prop-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .prop-bar {
+    display: flex;
+    height: 26px;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: var(--track);
+  }
+  .prop-seg { height: 100%; width: 0; transition: width .35s cubic-bezier(.4,0,.2,1); }
+  .prop-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: var(--text-12); color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .legend-swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+  /* ===== merchant details (aside) ===== */
+  .details-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .details-title { font-family: var(--font-body); font-size: var(--text-18); font-weight: var(--w-bold); color: var(--nw-navy); }
+  .reset-btn {
+    border: none; background: transparent; padding: 4px 6px; margin: -4px -6px;
+    font-family: var(--font-body); font-size: 15.6px; color: #000000;
+    font-weight: var(--w-medium); cursor: pointer; border-radius: 6px;
+  }
+  .reset-btn:hover { background: var(--surface-inset); }
+
+  .field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 20px; }
+  .field > label { font-size: 15.6px; font-weight: var(--w-medium); color: #000000; }
+  .input-wrap {
+    display: flex; align-items: center;
+    background: var(--surface-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    height: 46px; padding: 0 12px; gap: 6px;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .input-wrap:focus-within {
+    border-color: var(--focus-ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 22%, transparent);
+  }
+  .input-wrap .prefix { font-family: var(--font-mono); font-size: var(--text-14); color: var(--text-tertiary); }
+  .input-wrap input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-family: var(--font-body); font-size: 16.8px; color: #000000; min-width: 0;
+  }
+  .input-wrap input::placeholder { color: var(--text-tertiary); }
+
+  .divider { height: 1px; background: var(--border-subtle); margin: 4px 0 20px; }
+
+  .slider-block { margin-bottom: 22px; }
+  .slider-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .slider-name { font-size: 15.6px; font-weight: var(--w-medium); color: #000000; }
+  .slider-val { font-family: var(--font-mono); font-size: var(--text-24); font-weight: var(--w-medium); color: var(--text-primary); letter-spacing: var(--tracking-tight); }
+  .slider-scale { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: var(--text-11); color: var(--text-tertiary); margin-top: 6px; }
+
+  input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; width: 100%; height: 26px; cursor: pointer; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 9999px; background: var(--track); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 9999px; background: var(--track); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 24px; height: 24px; margin-top: -9px; border-radius: 9999px;
+    background: #fff; border: 2px solid var(--nw-green);
+    box-shadow: 0 1px 3px rgba(16,38,46,0.22); cursor: pointer; transition: transform .12s ease;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 24px; height: 24px; border-radius: 9999px;
+    background: #fff; border: 2px solid var(--nw-green);
+    box-shadow: 0 1px 3px rgba(16,38,46,0.22); cursor: pointer;
+  }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.08); }
+  input[type="range"]:focus-visible { outline: none; }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--nw-green) 30%, transparent); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="shell">
+
+    <!-- Header -->
+    <div>
+      <div class="eyebrow"><span>Merchant Savings Estimator</span></div>
+      <h1>Processing fee comparison</h1>
+      <p id="subline" class="subline"></p>
+    </div>
+
+    <div class="grid">
+
+      <!-- MAIN: fee comparison (top) + potential savings (below) -->
+      <div class="main">
+
+        <!-- Fee comparison -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Fee comparison</span>
+            <span id="cmpChip" class="chip"></span>
+          </div>
+
+          <div class="bars">
+            <div class="bar-row">
+              <span class="bar-label">Current</span>
+              <div class="bar-track">
+                <div id="barCur" class="bar-fill"></div>
+                <span id="barCurVal" class="bar-val"></span>
+              </div>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">Proposed</span>
+              <div class="bar-track">
+                <div id="barNew" class="bar-fill"></div>
+                <span id="barNewVal" class="bar-val"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="meta-row">
+            <span>Effective rate</span>
+            <span class="val"><span id="effCur"></span> &rarr; <span id="effNew" style="font-weight:var(--w-semibold);"></span></span>
+          </div>
+          <div class="meta-row" style="border-top:none;padding-top:0;margin-top:12px;">
+            <span>Annual fees</span>
+            <span class="val"><span id="curYearFee"></span> &rarr; <span id="newYearFee" style="font-weight:var(--w-semibold);"></span></span>
+          </div>
+
+          <p class="note">Estimate only. Based on a flat processing rate applied to the stated monthly card volume. Actual fees vary by card mix, assessments, and provider terms.</p>
+        </div>
+
+        <!-- Potential savings -->
+        <div class="card">
+          <div class="card-head">
+            <span id="savTitle" class="card-title">Potential savings</span>
+            <span id="savChip" class="chip"></span>
+          </div>
+
+          <div class="savings-figs">
+            <div class="fig">
+              <span class="fig-label">Per month</span>
+              <span id="monthlySave" class="fig-val"></span>
+            </div>
+            <div class="fig">
+              <span class="fig-label">Per year</span>
+              <span id="annualSave" class="fig-val"></span>
+            </div>
+          </div>
+
+          <div class="prop-wrap">
+            <div class="prop-bar">
+              <div id="propBase" class="prop-seg"></div>
+              <div id="propDelta" class="prop-seg"></div>
+            </div>
+            <div class="prop-legend">
+              <span class="legend-item"><span id="swBase" class="legend-swatch"></span><span id="lblBase"></span></span>
+              <span class="legend-item"><span id="swDelta" class="legend-swatch"></span><span id="lblDelta"></span></span>
+            </div>
+          </div>
+
+          <p id="savFootnote" class="note"></p>
+        </div>
+
+      </div>
+
+      <!-- ASIDE: merchant details (last 4 columns) -->
+      <div class="aside">
+        <div class="card">
+          <div class="details-head">
+            <span class="details-title">Merchant details</span>
+            <button id="reset" type="button" class="reset-btn">Reset</button>
+          </div>
+
+          <div class="field">
+            <label for="biz">Business name</label>
+            <div class="input-wrap">
+              <input id="biz" type="text" placeholder="e.g. Acme Coffee Co.">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="vol">Estimated monthly card volume</label>
+            <div class="input-wrap">
+              <span class="prefix" id="curSym">$</span>
+              <input id="vol" type="text" inputmode="decimal" placeholder="50,000">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="slider-block">
+            <div class="slider-head">
+              <span class="slider-name">Current rate</span>
+              <span id="curRateTop" class="slider-val"></span>
+            </div>
+            <input id="curSlider" type="range" min="1" max="4" step="0.01" aria-label="Current rate" style="accent-color:var(--nw-navy);">
+            <div class="slider-scale"><span id="minRateA"></span><span id="maxRateA"></span></div>
+          </div>
+
+          <div class="slider-block" style="margin-bottom:0;">
+            <div class="slider-head">
+              <span class="slider-name">Proposed new rate</span>
+              <span id="newRateTop" class="slider-val" style="color:var(--nw-green-dark);"></span>
+            </div>
+            <input id="newSlider" type="range" min="1" max="4" step="0.01" aria-label="Proposed new rate" style="accent-color:var(--nw-green);">
+            <div class="slider-scale"><span id="minRateB"></span><span id="maxRateB"></span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- palette ----
+  var GREEN = "#00AE4D";
+  var GREEN_DARK = "#006842";
+  var NAVY = "#003650";
+  var ORANGE = "#FF7C2A";
+  var GRAY = "#8A979B";
+
+  var maxRate = 4, minRate = 1, currencySymbol = "$";
+
+  var state = { businessName: "", volume: "50000", currentRate: "2.90", newRate: "2.40" };
+
+  function num(s) {
+    var n = parseFloat(String(s == null ? "" : s).replace(/[^0-9.]/g, ""));
+    return isFinite(n) ? n : 0;
+  }
+  function money(n) { return currencySymbol + Math.round(Math.abs(n)).toLocaleString("en-US"); }
+  function pct(n) {
+    return (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var el = {
+    subline: $("subline"), curSym: $("curSym"),
+    biz: $("biz"), vol: $("vol"),
+    curSlider: $("curSlider"), newSlider: $("newSlider"),
+    curRateTop: $("curRateTop"), newRateTop: $("newRateTop"),
+    minRateA: $("minRateA"), maxRateA: $("maxRateA"),
+    minRateB: $("minRateB"), maxRateB: $("maxRateB"),
+    cmpChip: $("cmpChip"),
+    barCur: $("barCur"), barNew: $("barNew"), barCurVal: $("barCurVal"), barNewVal: $("barNewVal"),
+    effCur: $("effCur"), effNew: $("effNew"),
+    curYearFee: $("curYearFee"), newYearFee: $("newYearFee"),
+    savTitle: $("savTitle"), savChip: $("savChip"),
+    monthlySave: $("monthlySave"), annualSave: $("annualSave"),
+    propBase: $("propBase"), propDelta: $("propDelta"),
+    swBase: $("swBase"), swDelta: $("swDelta"), lblBase: $("lblBase"), lblDelta: $("lblDelta"),
+    savFootnote: $("savFootnote"),
+    reset: $("reset"),
+  };
+
+  function render() {
+    var vol = num(state.volume);
+    var rc = num(state.currentRate);
+    var rn = num(state.newRate);
+
+    var curFee = vol * rc / 100;
+    var newFee = vol * rn / 100;
+    var monthlySave = curFee - newFee;
+    var annualSave = monthlySave * 12;
+    var positive = monthlySave > 0;
+    var zero = monthlySave === 0;
+    var hasResult = vol > 0 && (rc > 0 || rn > 0);
+
+    var redPct = curFee > 0 ? (monthlySave / curFee) * 100 : 0;
+    var absRedRound = Math.abs(Math.round(redPct));
+    var biz = state.businessName.trim();
+
+    // header
+    el.subline.textContent = biz
+      ? "Savings estimate for " + biz
+      : "Set the merchant’s volume and rates to build a live savings estimate.";
+
+    // rate displays
+    el.curRateTop.textContent = pct(rc);
+    el.newRateTop.textContent = pct(rn);
+    el.minRateA.textContent = pct(minRate); el.maxRateA.textContent = pct(maxRate);
+    el.minRateB.textContent = pct(minRate); el.maxRateB.textContent = pct(maxRate);
+
+    // ===== fee comparison bar chart =====
+    var maxFee = Math.max(curFee, newFee, 1);
+    var newColor = zero ? NAVY : (positive ? GREEN : ORANGE);
+    el.barCur.style.width = (curFee / maxFee * 100) + "%";
+    el.barNew.style.width = (newFee / maxFee * 100) + "%";
+    el.barCur.style.background = NAVY;
+    el.barNew.style.background = newColor;
+    el.barCurVal.textContent = money(curFee);
+    el.barNewVal.textContent = money(newFee);
+
+    // comparison chip
+    var cmpStr = zero ? "No change"
+      : (positive ? absRedRound + "% lower" : absRedRound + "% higher");
+    el.cmpChip.textContent = cmpStr;
+    el.cmpChip.style.display = hasResult ? "inline-flex" : "none";
+    el.cmpChip.style.background = zero ? "var(--surface-inset)"
+      : (positive ? "color-mix(in srgb, " + GREEN + " 12%, transparent)" : "color-mix(in srgb, " + ORANGE + " 14%, transparent)");
+    el.cmpChip.style.color = zero ? "var(--text-secondary)" : (positive ? GREEN_DARK : "#C4551A");
+
+    // effective + annual
+    el.effCur.textContent = pct(rc);
+    el.effNew.textContent = pct(rn);
+    el.effNew.style.color = zero ? "var(--text-primary)" : (positive ? GREEN_DARK : "#C4551A");
+    el.curYearFee.textContent = money(curFee * 12);
+    el.newYearFee.textContent = money(newFee * 12);
+
+    // ===== potential savings =====
+    var increase = monthlySave < 0;
+    el.savTitle.textContent = increase ? "Potential increase" : "Potential savings";
+    el.monthlySave.textContent = money(monthlySave);
+    el.annualSave.textContent = money(annualSave);
+    var figColor = zero ? "var(--text-primary)" : (positive ? GREEN_DARK : "#C4551A");
+    el.monthlySave.style.color = figColor;
+    el.annualSave.style.color = figColor;
+
+    // savings chip
+    el.savChip.textContent = zero ? "No change"
+      : (positive ? "Save " + money(monthlySave) + "/mo" : "+" + money(monthlySave) + "/mo");
+    el.savChip.style.display = hasResult ? "inline-flex" : "none";
+    el.savChip.style.background = zero ? "var(--surface-inset)"
+      : (positive ? "color-mix(in srgb, " + GREEN + " 12%, transparent)" : "color-mix(in srgb, " + ORANGE + " 14%, transparent)");
+    el.savChip.style.color = zero ? "var(--text-secondary)" : (positive ? GREEN_DARK : "#C4551A");
+
+    // proportion bar: base segment (fees still paid / current) + delta segment (savings / increase)
+    var base = Math.max(curFee, newFee, 1);
+    if (increase) {
+      // scaled to new (larger) fee: current portion gray, increase portion orange
+      el.propBase.style.width = (curFee / base * 100) + "%";
+      el.propDelta.style.width = ((newFee - curFee) / base * 100) + "%";
+      el.propBase.style.background = GRAY;
+      el.propDelta.style.background = ORANGE;
+      el.swBase.style.background = GRAY;
+      el.swDelta.style.background = ORANGE;
+      el.lblBase.textContent = "Current fees " + money(curFee);
+      el.lblDelta.textContent = "Added " + money(newFee - curFee);
+    } else {
+      // scaled to current (larger) fee: new fee still paid gray, savings green
+      el.propBase.style.width = (newFee / base * 100) + "%";
+      el.propDelta.style.width = (monthlySave / base * 100) + "%";
+      el.propBase.style.background = GRAY;
+      el.propDelta.style.background = GREEN;
+      el.swBase.style.background = GRAY;
+      el.swDelta.style.background = GREEN;
+      el.lblBase.textContent = "New fees " + money(newFee);
+      el.lblDelta.textContent = "Saved " + money(monthlySave);
+    }
+
+    el.savFootnote.textContent = zero
+      ? "Adjust the proposed rate to see the impact."
+      : (positive
+          ? "Estimated " + absRedRound + "% reduction in processing fees" + (biz ? " for " + biz : "") + "."
+          : "Estimated " + absRedRound + "% increase in processing fees" + (biz ? " for " + biz : "") + ".");
+  }
+
+  // ---- wire up ----
+  el.curSym.textContent = currencySymbol;
+  el.biz.value = state.businessName;
+  el.vol.value = state.volume;
+  el.curSlider.value = state.currentRate;
+  el.newSlider.value = state.newRate;
+
+  el.biz.addEventListener("input", function (e) { state.businessName = e.target.value; render(); });
+  el.vol.addEventListener("input", function (e) { state.volume = e.target.value; render(); });
+  el.curSlider.addEventListener("input", function (e) { state.currentRate = e.target.value; render(); });
+  el.newSlider.addEventListener("input", function (e) { state.newRate = e.target.value; render(); });
+  el.reset.addEventListener("click", function () {
+    state = { businessName: "", volume: "", currentRate: "2.90", newRate: "2.40" };
+    el.biz.value = ""; el.vol.value = "";
+    el.curSlider.value = "2.90"; el.newSlider.value = "2.40";
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
