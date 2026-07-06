@@ -528,6 +528,19 @@
     el.barCurVal.textContent = money(curFee);
     el.barNewVal.textContent = money(newFee);
 
+    // Reverse the value out to white when the right-aligned label sits over its filled bar;
+    // keep it dark when the label is over the empty gray track.
+    function setBarValColor(valEl, fee) {
+      var track = valEl.parentElement;
+      var tw = track.clientWidth || 0;
+      var lw = valEl.offsetWidth || 0;
+      var fillPx = tw * (fee / maxFee);
+      var labelLeft = tw - 12 - lw;            // left edge of the label (right:12px)
+      valEl.style.color = (fillPx >= labelLeft - 2) ? "#ffffff" : "var(--text-primary)";
+    }
+    setBarValColor(el.barCurVal, curFee);
+    setBarValColor(el.barNewVal, newFee);
+
     // comparison chip
     var cmpStr = zero ? "No change"
       : (positive ? absRedRound + "% lower" : absRedRound + "% higher");
@@ -609,6 +622,8 @@
     el.curSlider.value = "2.90"; el.newSlider.value = "2.40";
     render();
   });
+
+  window.addEventListener("resize", render);
 
   render();
 })();
